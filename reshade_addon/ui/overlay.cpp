@@ -119,12 +119,12 @@ struct OverlayWrapScope {
 };
 
 static const char kRtBlockedText[] =
-    "Ray tracing is ON in the game, and this version does not support it: mods are OFF.\n"
-    "Turn ray tracing off in the game's graphics settings, then restart the game.";
+    "游戏开着光线追踪，这个版本还不支持：mod 已关闭。\n"
+    "请在游戏的画面设置里关掉光线追踪，然后重启游戏。";
 
 static const char kFaultedText[] =
-    "The add-on hit an error and stopped: mods are OFF until the game restarts.\n"
-    "Please report it with wwmi_dx12_crash.log from the game's Win64 folder.";
+    "插件遇到错误，已经停下：mod 会一直关闭，直到重启游戏。\n"
+    "请把游戏 Win64 目录下的 wwmi_dx12_crash.log 一起提交。";
 
 static const char* StoppedText()
 {
@@ -133,8 +133,6 @@ static const char* StoppedText()
 
 namespace {
 
-constexpr ImGuiID     kPanelSplitNode = 0x57570D01;
-constexpr ImGuiID     kPanelNode = 0x57570D02;
 constexpr const char* kPanelWindow = "WWMI-DX12###wwmi-dx12-panel";
 constexpr const char* kPanelSettings = "[Window][###wwmi-dx12-panel]";
 std::atomic<bool>     g_overlay_open{ false };
@@ -164,46 +162,6 @@ void SetConfigLines(const char* section, const char* key, const std::vector<std:
         joined += '\0';
     }
     reshade::set_config_value(nullptr, section, key, joined.c_str(), joined.size());
-}
-
-struct DockLine {
-    size_t   index = 0;
-    unsigned id = 0;
-    unsigned parent = 0;
-    int      w = 0;
-    int      h = 0;
-    bool     central = false;
-    bool     split_x = false;
-
-    bool Read(const std::string& s, size_t i)
-    {
-        const char* p = s.c_str();
-        while (*p == ' ') ++p;
-        if (strncmp(p, "DockNode", 8) != 0 && strncmp(p, "DockSpace", 9) != 0) return false;
-        index = i;
-        if (const char* f = strstr(p, " ID=0x")) sscanf_s(f, " ID=0x%X", &id);
-        if (const char* f = strstr(p, "Parent=0x")) sscanf_s(f, "Parent=0x%X", &parent);
-        if (const char* f = strstr(p, "SizeRef=")) sscanf_s(f, "SizeRef=%d,%d", &w, &h);
-        central = strstr(p, "CentralNode=1") != nullptr;
-        split_x = strstr(p, "Split=X") != nullptr;
-        return id != 0;
-    }
-};
-
-const DockLine* FindDock(const std::vector<DockLine>& nodes, unsigned id)
-{
-    for (const DockLine& d : nodes)
-        if (d.id == id) return &d;
-    return nullptr;
-}
-
-std::string ReplaceField(std::string line, const char* field, const std::string& value)
-{
-    const size_t at = line.find(field);
-    if (at == std::string::npos) return line;
-    size_t end = line.find(' ', at);
-    if (end == std::string::npos) end = line.size();
-    return line.replace(at, end - at, std::string(field) + value);
 }
 
 unsigned WindowDockNode(const std::vector<std::string>& windows, const char* header)
@@ -237,65 +195,26 @@ void PointPanelAt(std::vector<std::string>& windows, unsigned node)
     windows.push_back(dock);
 }
 
-const char* SplitBesideReShade(std::vector<std::string>& docking, unsigned home_node)
-{
-    if (docking.empty() || docking[0] != "[Docking][Data]") return "no saved docking";
-    std::vector<DockLine> nodes;
-    for (size_t i = 0; i < docking.size(); ++i) {
-        DockLine d;
-        if (d.Read(docking[i], i)) nodes.push_back(d);
-    }
-    if (FindDock(nodes, kPanelNode)) return nullptr;
-    const DockLine* home = FindDock(nodes, home_node);
-    const DockLine* central = nullptr;
-    for (const DockLine& d : nodes)
-        if (d.central) central = &d;
-    if (!home || !central || !central->parent || home->parent != central->parent) return "ReShade's tabs are not beside the free area";
-    const DockLine* split = FindDock(nodes, central->parent);
-    if (!split || !split->split_x) return "ReShade's tabs are not left or right of the free area";
-    const int panel_w = home->w;
-    const int rest_w = central->w - panel_w;
-    if (panel_w < 100 || rest_w < 200) return "the free area is too narrow";
-    std::string rest = ReplaceField(docking[central->index], "SizeRef=", std::to_string(rest_w) + "," + std::to_string(central->h));
-    char        parent[16];
-    std::snprintf(parent, sizeof parent, "0x%08X", kPanelSplitNode);
-    rest = ReplaceField(rest, "Parent=", parent);
-    char outer[160];
-    std::snprintf(outer, sizeof outer, "  DockNode  ID=0x%08X Parent=0x%08X SizeRef=%d,%d Split=X", kPanelSplitNode, central->parent,
-        central->w, central->h);
-    char panel[160];
-    std::snprintf(panel, sizeof panel, "    DockNode  ID=0x%08X Parent=0x%08X SizeRef=%d,%d", kPanelNode, kPanelSplitNode, panel_w,
-        central->h);
-    const bool               reshade_left = home->index < central->index;
-    std::vector<std::string> out(docking.begin(), docking.begin() + central->index);
-    out.push_back(outer);
-    out.push_back(reshade_left ? rest : std::string(panel));
-    out.push_back(reshade_left ? std::string(panel) : rest);
-    out.insert(out.end(), docking.begin() + central->index + 1, docking.end());
-    docking.swap(out);
-    return nullptr;
-}
-
 } // namespace
 
+// One overlay, not two: the add-on's window is docked as a tab of ReShade's own window, so it shares its
+// place instead of taking a column of the screen. The layout is written once (PanelDocked=2); after that,
+// wherever the user drags it stays.
 void DockOverlayPanelOnce()
 {
     int docked = 0;
-    if (reshade::get_config_value(nullptr, "wwmi-dx12", "PanelDocked", docked) && docked) return;
+    if (reshade::get_config_value(nullptr, "wwmi-dx12", "PanelDocked", docked) && docked >= 2) return;
     std::vector<std::string> windows = ConfigLines("OVERLAY", "Window");
-    std::vector<std::string> docking = ConfigLines("OVERLAY", "Docking");
     const unsigned           home_node = WindowDockNode(windows, "[Window][###home]");
-    const char*              why = home_node ? SplitBesideReShade(docking, home_node) : "ReShade's window is not docked";
-    if (why) {
-        logger::write("PANELDOCK: the add-on's window is not docked (%s) -- it opens on the right, placed by hand", why);
+    if (!home_node) {
+        logger::write("PANELDOCK: ReShade's window is not docked -- the add-on's window floats; drag it onto "
+                      "ReShade's window once and it stays there");
         return;
     }
-    PointPanelAt(windows, kPanelNode);
-    SetConfigLines("OVERLAY", "Docking", docking);
+    PointPanelAt(windows, home_node);
     SetConfigLines("OVERLAY", "Window", windows);
-    reshade::set_config_value(nullptr, "wwmi-dx12", "PanelDocked", 1);
-    logger::write("PANELDOCK: the add-on's window docked on the side of the free area away from ReShade's tabs -- once; "
-                  "a later move is kept");
+    reshade::set_config_value(nullptr, "wwmi-dx12", "PanelDocked", 2);
+    logger::write("PANELDOCK: the add-on's window is docked as a tab of ReShade's own window");
 }
 
 bool OnOverlayOpen(effect_runtime*, bool open, input_source)
@@ -332,9 +251,9 @@ static void DrawPerformanceDetails(const PerfFigures& s)
 {
     ImGui::PushTextWrapPos(-1.0f);
     if (ImGui::BeginTable("perfareas", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableSetupColumn("Processor work");
-        ImGui::TableSetupColumn("ms a frame");
-        ImGui::TableSetupColumn("share");
+        ImGui::TableSetupColumn("处理器开销");
+        ImGui::TableSetupColumn("每帧 ms");
+        ImGui::TableSetupColumn("占比");
         ImGui::TableHeadersRow();
         for (int a = 0; a < PA_COUNT; ++a) {
             ImGui::TableNextRow();
@@ -348,8 +267,8 @@ static void DrawPerformanceDetails(const PerfFigures& s)
         ImGui::EndTable();
     }
     if (ImGui::BeginTable("perfgpu", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableSetupColumn("Graphics card work");
-        ImGui::TableSetupColumn("ms a frame");
+        ImGui::TableSetupColumn("显卡开销");
+        ImGui::TableSetupColumn("每帧 ms");
         ImGui::TableHeadersRow();
         for (int a = 0; a < kPerfGpuAreaCount; ++a) {
             ImGui::TableNextRow();
@@ -361,17 +280,17 @@ static void DrawPerformanceDetails(const PerfFigures& s)
         ImGui::EndTable();
     }
     ImGui::PopTextWrapPos();
-    ImGui::Text("Busiest thread %u: %.2f ms a frame; %.2f ms over the %d threads the add-on ran on", s.cpu_busiest_tid,
+    ImGui::Text("最忙线程 %u：每帧 %.2f ms；插件用到的 %d 个线程合计 %.2f ms", s.cpu_busiest_tid,
         s.cpu_busiest_ms, s.cpu_all_ms, s.cpu_threads);
-    ImGui::TextDisabled("Measuring costs %.2f ms a frame over all threads, left out of the figures above.", s.timers_ms);
-    if (ImGui::TreeNode("Every measured step")) {
+    ImGui::TextDisabled("测量本身每帧在所有线程上花 %.2f ms，未计入上面的数字。", s.timers_ms);
+    if (ImGui::TreeNode("每个被测量的步骤")) {
         ImGui::PushTextWrapPos(-1.0f);
         if (ImGui::BeginTable("perfsteps", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
-            ImGui::TableSetupColumn("step");
-            ImGui::TableSetupColumn("with inner ms");
-            ImGui::TableSetupColumn("own ms");
-            ImGui::TableSetupColumn("slowest frame ms");
-            ImGui::TableSetupColumn("calls a frame");
+            ImGui::TableSetupColumn("步骤");
+            ImGui::TableSetupColumn("含子项 ms");
+            ImGui::TableSetupColumn("自身 ms");
+            ImGui::TableSetupColumn("最慢帧 ms");
+            ImGui::TableSetupColumn("每帧调用");
             ImGui::TableHeadersRow();
             for (int i = 0; i < PROF_COUNT; ++i) {
                 const PerfStep& p = s.steps[i];
@@ -403,27 +322,27 @@ static void DrawPerformanceDetails(const PerfFigures& s)
 static void DrawPerformanceSummary()
 {
     if (!g_perf.HaveShown()) {
-        ImGui::TextDisabled("Measuring...");
+        ImGui::TextDisabled("测量中…");
     } else {
         const PerfFigures& s = g_perf.Shown();
-        ImGui::Text("Frame rate: %.0f FPS (slowest frame %.0f FPS)", s.fps, s.slowest_fps);
-        ImGui::Text("Add-on on the processor: %.2f ms a frame -- without it, up to %.0f FPS more", s.cpu_busiest_ms,
+        ImGui::Text("帧率：%.0f FPS（最慢帧 %.0f FPS）", s.fps, s.slowest_fps);
+        ImGui::Text("插件在处理器上：每帧 %.2f ms —— 没有它最多还能多 %.0f FPS", s.cpu_busiest_ms,
             PerfFpsGain(s.frame_ms, s.cpu_busiest_ms));
         if (s.gpu_read)
-            ImGui::Text("Add-on on the graphics card: %.2f ms a frame -- without it, up to %.0f FPS more", s.gpu_ms,
+            ImGui::Text("插件在显卡上：每帧 %.2f ms —— 没有它最多还能多 %.0f FPS", s.gpu_ms,
                 PerfFpsGain(s.frame_ms, s.gpu_ms));
         else
-            ImGui::TextDisabled("Add-on on the graphics card: no reading yet");
+            ImGui::TextDisabled("插件在显卡上：还没有读数");
     }
     if (g_perf.HaveMemory()) {
         constexpr double  GB = 1024.0 * 1024.0 * 1024.0;
         const PerfMemory& m = g_perf.MemoryNow();
         const PerfMemory& pk = g_perf.MemoryPeak();
-        ImGui::TextColored(MemoryColour(m.vram_used, m.vram_budget), "Video memory: %.1f of %.1f GB (%.0f%%), highest %.1f GB",
+        ImGui::TextColored(MemoryColour(m.vram_used, m.vram_budget), "显存：%.1f / %.1f GB（%.0f%%），最高 %.1f GB",
             m.vram_used / GB, m.vram_budget / GB, m.vram_budget ? 100.0 * (double)m.vram_used / (double)m.vram_budget : 0.0,
             pk.vram_used / GB);
-        ImGui::Text("Shared memory (system memory the graphics card uses): %.1f GB", m.shared_used / GB);
-        ImGui::Text("Game memory: %.1f GB", m.game_private / GB);
+        ImGui::Text("共享内存（显卡占用的系统内存）：%.1f GB", m.shared_used / GB);
+        ImGui::Text("游戏内存：%.1f GB", m.game_private / GB);
     }
 }
 
@@ -436,7 +355,7 @@ static const char* ToggleKeyName()
         std::snprintf(b, sizeof b, "F%d", k - VK_F1 + 1);
         return b;
     }
-    return k ? "the ini's key" : "no key";
+    return k ? "ini 里的键" : "未设置";
 }
 
 void DrawOverlay(effect_runtime*)
@@ -475,39 +394,39 @@ void DrawOverlay(effect_runtime*)
     // Master bypass: every hot handler early-outs, for an A/B against a vanilla game with the addon loaded.
     {
         char a1[80];
-        std::snprintf(a1, sizeof a1, "Disable addon (%s toggles; toggle_key in wwmi_dx12.ini)", ToggleKeyName());
+        std::snprintf(a1, sizeof a1, "禁用插件（%s 切换，见 wwmi_dx12.ini 的 toggle_key）", ToggleKeyName());
         bool dis = g_addon_disabled.load();
         if (NCheckbox("A1", a1, &dis))
             SetAddonDisabled(dis);
         if (dis) {
-            ImGui::TextColored({ 1, 0.4f, 0.4f, 1 }, "ADDON DISABLED -- no mods, no overrides, no skinning.");
+            ImGui::TextColored({ 1, 0.4f, 0.4f, 1 }, "插件已禁用 —— 不加载 mod、不替换资源、不做蒙皮。");
             return;
         }
     }
 
-    if (NCheckbox("A2", "Debug log (wwmi_dx12_addon.log -- attach it to bug reports)", &g_debug)) {
+    if (NCheckbox("A2", "调试日志（wwmi_dx12_addon.log —— 反馈问题时请附上）", &g_debug)) {
         SetDiagnostics(g_debug, g_log_verbosity);
         if (!g_addon_ini_path.empty())
             WritePrivateProfileStringW(L"wwmi-dx12", L"debug", g_debug ? L"1" : L"0", g_addon_ini_path.c_str());
     }
     if (g_debug) {
-        if (NSliderInt("A3", "Debug level (1 = events/errors, 2 = +info)", &g_log_verbosity, 1, 2)) {
+        if (NSliderInt("A3", "调试等级（1 = 事件/错误，2 = 再加上信息）", &g_log_verbosity, 1, 2)) {
             SetDiagnostics(g_debug, g_log_verbosity);
             if (!g_addon_ini_path.empty())
                 WritePrivateProfileStringW(L"wwmi-dx12", L"log_level", g_log_verbosity == 1 ? L"1" : L"2", g_addon_ini_path.c_str());
         }
     }
-    if (NCheckbox("A4", "Decensor", &g_decensor) && !g_addon_ini_path.empty())
+    if (NCheckbox("A4", "去衣（Decensor）", &g_decensor) && !g_addon_ini_path.empty())
         WritePrivateProfileStringW(L"wwmi-dx12", L"decensor", g_decensor ? L"1" : L"0", g_addon_ini_path.c_str());
-    if (NCheckbox("A5", "Hide UID (your player number: bottom right, Esc menu, Friends list)", &g_hide_uid) && !g_addon_ini_path.empty())
+    if (NCheckbox("A5", "隐藏 UID（你的玩家编号：右下角、Esc 菜单、好友列表）", &g_hide_uid) && !g_addon_ini_path.empty())
         WritePrivateProfileStringW(L"wwmi-dx12", L"hide_uid", g_hide_uid ? L"1" : L"0", g_addon_ini_path.c_str());
 #ifdef WWMI_DEBUG
-    if (NCheckbox("A8", "Hide mod outlines", &g_hide_outline) && !g_addon_ini_path.empty())
+    if (NCheckbox("A8", "隐藏 mod 描边", &g_hide_outline) && !g_addon_ini_path.empty())
         WritePrivateProfileStringW(L"wwmi-dx12", L"hide_outline", g_hide_outline ? L"1" : L"0", g_addon_ini_path.c_str());
 #endif
     {
         bool lookalike = g_texlod_resemblance;
-        if (NCheckbox("A13", "Use look-alike texture matches (a game texture that looks like a mod's texture gets it, as if it had the same hash)", &lookalike)) {
+        if (NCheckbox("A13", "使用外观相似的贴图匹配（游戏贴图看起来像 mod 的贴图就套用，等同同一个 hash）", &lookalike)) {
             TexLodSetResemblance(lookalike);
             TexLookAlikesSwitched(lookalike);
             if (!g_addon_ini_path.empty())
@@ -516,66 +435,64 @@ void DrawOverlay(effect_runtime*)
     }
     {
         bool cache = g_texlod_cache;
-        if (NCheckbox("A14", "Use texture match cache (mod textures on the game's distant copies; off: nothing is learned, read or saved)", &cache)) {
+        if (NCheckbox("A14", "使用贴图匹配缓存（mod 贴图用于游戏远处的副本；关闭：不学习、不读取、不保存）", &cache)) {
             TexLodSetCache(cache);
             if (!g_addon_ini_path.empty())
                 WritePrivateProfileStringW(L"wwmi-dx12", L"lod_cache", cache ? L"1" : L"0", g_addon_ini_path.c_str());
         }
     }
-    if (NCheckbox("A12", "Load mod textures in the background", &g_tex_deferred) && !g_addon_ini_path.empty())
+    if (NCheckbox("A12", "后台加载 mod 贴图", &g_tex_deferred) && !g_addon_ini_path.empty())
         WritePrivateProfileStringW(L"wwmi-dx12", L"tex_background", g_tex_deferred ? L"1" : L"0", g_addon_ini_path.c_str());
-    ImGui::TextDisabled("  on = no stutter when a modded character first shows; its own textures appear a moment later.\n"
-                        "  off = the mod's textures from the first frame; the game pauses briefly while they load.\n"
-                        "  Applies to characters that show after the change.");
-    if (NSliderInt("A19", "Mod texture budget", &g_tex_mod_budget, 0, kTexBudgetSteps - 1, TexBudgetName(g_tex_mod_budget)) &&
+    ImGui::TextDisabled("  开 = 改装角色第一次出现时不卡顿，它的贴图稍后出现。\n"
+                        "  关 = 第一帧就用 mod 贴图，加载时游戏会短暂停顿。\n"
+                        "  对修改之后出现的角色生效。");
+    if (NSliderInt("A19", "mod 贴图显存预算", &g_tex_mod_budget, 0, kTexBudgetSteps - 1, TexBudgetName(g_tex_mod_budget)) &&
         !g_addon_ini_path.empty())
         WritePrivateProfileStringW(L"wwmi-dx12", L"tex_mod_budget", std::to_wstring(g_tex_mod_budget).c_str(),
             g_addon_ini_path.c_str());
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("  How much video memory mod textures may take. Auto keeps them within what the game leaves free: "
-                        "while they fit nothing changes; when memory runs short, or a texture on screen needs room to come "
-                        "back sharp, textures not on screen go to a lower size, the least used first, and out if that is not "
-                        "enough. A size caps each mod as well. Original never changes a texture.");
+    ImGui::TextDisabled("  mod 贴图最多能占多少显存。Auto 让它们待在游戏剩余的空闲显存内：装得下就什么都不变；显存紧张、"
+                        "或屏幕上某张贴图需要空间恢复清晰时，先把不在屏幕上的贴图降一档（最久没用的先降），还不够就释放。"
+                        "指定大小同时限制每个 mod。Original 从不改动任何贴图。");
     {
         const TexCollector::Reading& r = g_tex_gc.Now();
         if (r.valid) {
-            ImGui::TextDisabled("  Video memory: %.1f of %.1f GB in use", (double)r.used / 1073741824.0,
+            ImGui::TextDisabled("  显存占用：%.1f / %.1f GB", (double)r.used / 1073741824.0,
                 (double)r.budget / 1073741824.0);
-            ImGui::TextDisabled("  Mod textures: %.1f of %.1f GB allowed", (double)r.mods / 1073741824.0,
+            ImGui::TextDisabled("  mod 贴图：%.1f / %.1f GB 可用", (double)r.mods / 1073741824.0,
                 (double)r.room / 1073741824.0);
             if (g_tex_gc.Tight())
                 ImGui::TextColored({ 1, 1, 0, 1 }, TexCollects(g_tex_mod_budget) ?
-                    "  Short of video memory: mod textures not on screen are let go first." :
-                    "  Short of video memory: Auto would let go of mod textures not on screen.");
+                    "  显存紧张：优先释放不在屏幕上的 mod 贴图。" :
+                    "  显存紧张：Auto 会释放不在屏幕上的 mod 贴图。");
         }
     }
     ImGui::PopTextWrapPos();
-    if (NCheckbox("A20", "Mod textures follow the game's distance sizes (experimental)", &g_tex_distance) &&
+    if (NCheckbox("A20", "mod 贴图跟随游戏的距离档位（实验性）", &g_tex_distance) &&
         !g_addon_ini_path.empty())
         WritePrivateProfileStringW(L"wwmi-dx12", L"tex_distance", g_tex_distance ? L"1" : L"0", g_addon_ini_path.c_str());
     ImGui::PushTextWrapPos(0.0f);
-    ImGui::TextDisabled("  on = where the game draws a character's own texture a size or more down, as it does further from "
-                        "the camera, the mod's texture goes down as many sizes, and back up when the game's comes back. "
-                        "Saves video memory. With Auto or a size on A19.");
+    ImGui::TextDisabled("  开 = 游戏把角色自己的贴图按距离降低一档以上时，mod 贴图也降同样档数，游戏恢复时跟着恢复。"
+                        "省显存。需要 A19 为 Auto 或指定大小。");
     ImGui::PopTextWrapPos();
-    if (NCheckbox("A16", "Mod buffers (meshes, shape keys) in video memory", &MigotoPort::g_buffers_in_vram) && !g_addon_ini_path.empty())
+    if (NCheckbox("A16", "mod 缓冲（网格、形态键）放进显存", &MigotoPort::g_buffers_in_vram) && !g_addon_ini_path.empty())
         WritePrivateProfileStringW(L"wwmi-dx12", L"buffers_in_vram", MigotoPort::g_buffers_in_vram ? L"1" : L"0",
             g_addon_ini_path.c_str());
-    ImGui::TextDisabled("  on = faster drawing of modded characters.\n"
-                        "  off = kept in system memory, for cards short on video memory; costs frame rate with large mods.\n"
-                        "  Applies at the next launch.");
+    ImGui::TextDisabled("  开 = 改装角色绘制更快。\n"
+                        "  关 = 留在内存里，适合显存紧张的显卡；大型 mod 会掉帧。\n"
+                        "  下次启动生效。");
     {
         int mods = 0;
         ModLoader::GetLastStats(mods);
-        ImGui::Text("Active mods: %d", mods);
+        ImGui::Text("活跃 mod：%d", mods);
     }
     {
         static bool s_clear = false;
-        if (NButton("A11", "Clear caches at next launch (patched shaders, texture matches)") && !g_addon_ini_path.empty()) {
+        if (NButton("A11", "下次启动时清除缓存（已补丁的 shader、贴图匹配）") && !g_addon_ini_path.empty()) {
             WritePrivateProfileStringW(L"wwmi-dx12", L"clear_cache", L"1", g_addon_ini_path.c_str());
             s_clear = true;
         }
-        if (s_clear) ImGui::TextColored({ 1, 1, 0, 1 }, "Caches will be cleared at the next launch.");
+        if (s_clear) ImGui::TextColored({ 1, 1, 0, 1 }, "缓存会在下次启动时清除。");
     }
 #ifdef WWMI_DEBUG
     {
@@ -596,17 +513,17 @@ void DrawOverlay(effect_runtime*)
     ImGui::Separator();
     {
         bool perf = g_prof_enabled;
-        if (NCheckbox("A17", "Performance monitor: what the add-on costs, live (measuring costs a little itself)", &perf))
+        if (NCheckbox("A17", "性能监视：实时显示插件开销（测量本身有一点开销）", &perf))
             g_prof_enabled = perf;
     }
     if (g_prof_enabled) {
         DrawPerformanceSummary();
         if (g_perf.ReportRunning())
-            ImGui::TextColored({ 1, 1, 0, 1 }, "Recording the report: %.0f s left", g_perf.ReportSecondsLeft());
-        else if (NButton("A18", "Save a 10-second performance report next to wwmi_dx12_addon.log"))
+            ImGui::TextColored({ 1, 1, 0, 1 }, "正在录制报告：还剩 %.0f 秒", g_perf.ReportSecondsLeft());
+        else if (NButton("A18", "把 10 秒性能报告存到 wwmi_dx12_addon.log 旁边"))
             g_perf.RequestReport();
-        if (!g_perf.LastReport().empty()) ImGui::TextDisabled("Saved: %s", g_perf.LastReport().c_str());
-        if (g_perf.HaveShown() && ImGui::CollapsingHeader("Performance details")) DrawPerformanceDetails(g_perf.Shown());
+        if (!g_perf.LastReport().empty()) ImGui::TextDisabled("已保存：%s", g_perf.LastReport().c_str());
+        if (g_perf.HaveShown() && ImGui::CollapsingHeader("性能详情")) DrawPerformanceDetails(g_perf.Shown());
     }
 #ifdef WWMI_DEBUG
     ImGui::Separator();

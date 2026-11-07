@@ -89,7 +89,7 @@ with a `wwmi-dx12` window showing "Active mods" above 0.
 ## Known Issues
 
 - WWMI's hunting mode has no DX12 overlay (`[F8]` and the numpad hunting keys do nothing visible)
-- WWMI's own `[F6]` is this add-on's off switch while `toggle_key` is F6; move `toggle_key` to get it back
+- WWMI's own `[F6]` (turn its mods off) is blocked, so F6 can be `toggle_key` without toggling twice
 - A reload reads every mod ini again, but a mod's shaders are still patched the first time it draws
 - Decensor and RabbitFX mods prepare shaders on first sight (one-time stutter, saved for next launch)
 
@@ -106,10 +106,12 @@ with a `wwmi-dx12` window showing "Active mods" above 0.
 - `[F6]` - turn the add-on off and on. `toggle_key` in `wwmi_dx12.ini` picks another key, for another
   add-on that already uses F6
 - Keys a mod defines work as in DX11. WWMI's own keys are let through too, as on DX11: `[X]` closes its
-  notification, `[F12]` shows its guide. WWMI's `[F6]`, which turns its mods off, is this add-on's off
-  switch while `toggle_key` is F6; moved off F6, WWMI's `[F6]` works too.
+  notification, `[F12]` shows its guide. WWMI's `[F6]`, which turns its mods off, stays blocked: this
+  add-on has always owned F6, and the key is free for `toggle_key`.
 
 ## The wwmi-dx12 window
+
+It opens as a tab of ReShade's own window, so one overlay covers the screen, not two. Its text is Chinese.
 
 | Control | |
 |---|---|

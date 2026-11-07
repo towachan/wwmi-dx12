@@ -274,9 +274,10 @@ void EngineFrameTick(command_queue* queue, swapchain* sc, bool bind_back_buffer)
                     if (_wcsicmp(ns, L"Debugger") == 0) return false;
                     if (_wcsicmp(ns, L"WWMIv1") == 0) {
                         // WWMI's own keys run as they do on DX11: X closes its notification, F12 shows the
-                        // guide, Alt/Ctrl+F12 the other toggles. WWMI's F6 (turn its mods off) stays ours
-                        // only while the add-on's own toggle is still F6; moved in the ini, WWMI's works too.
-                        return g_toggle_key != VK_F6 || !SectionEndsWith(section, L"keytogglemods");
+                        // guide, Alt/Ctrl+F12 the other toggles. Its F6 (turn its mods off) never does: this
+                        // add-on has always owned F6, and two meanings on one key toggle twice. It stays
+                        // blocked wherever toggle_key points, so F6 does nothing at all.
+                        return !SectionEndsWith(section, L"keytogglemods");
                     }
                     auto mit = g_ns_to_mod.find(ns);
                     if (mit == g_ns_to_mod.end()) return true; // unknown ns: fire, never swallow silently

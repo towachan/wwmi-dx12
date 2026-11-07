@@ -45,6 +45,7 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <ExceptionHandling>Async</ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>IMGUI_DISABLE_INCLUDE_IMCONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(WwmiRoot)reshade_addon;$(WwmiRoot)reshade_addon\sdk\include;$(WwmiRoot)src;$(WwmiRoot)reshade_addon\sdk\deps\imgui;$(WwmiPristineDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
