@@ -115,11 +115,11 @@ void on_present_body(command_queue* queue, swapchain* sc)
             s_notice_until = ~0ull;
         }
     }
-    { // F6 (no modifiers) toggles A1. Polled before the bypass return below, so it also turns the addon back on.
-        static bool s_f6 = false;
-        const bool  f6 = GameKeyDown(VK_F6);
-        if (f6 && !s_f6 && !g_rt_blocked && !g_faulted) SetAddonDisabled(!g_addon_disabled.load());
-        s_f6 = f6;
+    { // toggle_key (F6 by default, ini): A1. Polled before the bypass return below, so it also turns the addon back on.
+        static bool s_toggle = false;
+        const bool  k = g_toggle_key && GameKeyDown(g_toggle_key);
+        if (k && !s_toggle && !g_rt_blocked && !g_faulted) SetAddonDisabled(!g_addon_disabled.load());
+        s_toggle = k;
     }
     VerboseTick();
     if (g_addon_disabled) return;

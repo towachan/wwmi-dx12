@@ -89,7 +89,7 @@ with a `wwmi-dx12` window showing "Active mods" above 0.
 ## Known Issues
 
 - WWMI's hunting mode has no DX12 overlay (`[F8]` and the numpad hunting keys do nothing visible)
-- WWMI's own `[F6]` would do what this add-on's `[F6]` already does, so that one key stays the add-on's
+- WWMI's own `[F6]` is this add-on's off switch while `toggle_key` is F6; move `toggle_key` to get it back
 - A reload reads every mod ini again, but a mod's shaders are still patched the first time it draws
 - Decensor and RabbitFX mods prepare shaders on first sight (one-time stutter, saved for next launch)
 
@@ -103,16 +103,17 @@ with a `wwmi-dx12` window showing "Active mods" above 0.
 - `[Home]` - ReShade, with the `wwmi-dx12` window
 - `[F10]` - read `d3dx.ini` and every mod ini again, as WWMI's F10 does on DX11: a mod added, removed or
   edited takes effect without restarting the game. `reload_key` in `wwmi_dx12.ini` picks another key
-- `[F6]` - turn the add-on off and on
+- `[F6]` - turn the add-on off and on. `toggle_key` in `wwmi_dx12.ini` picks another key, for another
+  add-on that already uses F6
 - Keys a mod defines work as in DX11. WWMI's own keys are let through too, as on DX11: `[X]` closes its
-  notification, `[F12]` shows its guide. WWMI's `[F6]`, which turns its mods off, stays this add-on's off
-  switch instead.
+  notification, `[F12]` shows its guide. WWMI's `[F6]`, which turns its mods off, is this add-on's off
+  switch while `toggle_key` is F6; moved off F6, WWMI's `[F6]` works too.
 
 ## The wwmi-dx12 window
 
 | Control | |
 |---|---|
-| Disable addon (F6) | all mod work off, to compare |
+| Disable addon (toggle_key, F6) | all mod work off, to compare |
 | Debug log / level | writes `<Win64>\wwmi_dx12_addon.log`; off by default, saved to `wwmi_dx12.ini` |
 | Decensor | saved to `wwmi_dx12.ini` |
 | Hide UID | hides your player number (bottom right, Esc menu, Friends list); off by default, saved to `wwmi_dx12.ini` |

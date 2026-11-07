@@ -427,6 +427,18 @@ static void DrawPerformanceSummary()
     }
 }
 
+// The add-on's own toggle key as its name, for the label: F-keys by number, anything else by description.
+static const char* ToggleKeyName()
+{
+    static char b[8];
+    const int   k = g_toggle_key;
+    if (k >= VK_F1 && k <= VK_F24) {
+        std::snprintf(b, sizeof b, "F%d", k - VK_F1 + 1);
+        return b;
+    }
+    return k ? "the ini's key" : "no key";
+}
+
 void DrawOverlay(effect_runtime*)
 {
     OverlayWrapScope wrap_every_line;
@@ -462,8 +474,10 @@ void DrawOverlay(effect_runtime*)
 #endif
     // Master bypass: every hot handler early-outs, for an A/B against a vanilla game with the addon loaded.
     {
+        char a1[80];
+        std::snprintf(a1, sizeof a1, "Disable addon (%s toggles; toggle_key in wwmi_dx12.ini)", ToggleKeyName());
         bool dis = g_addon_disabled.load();
-        if (NCheckbox("A1", "Disable addon (F6 toggles)", &dis))
+        if (NCheckbox("A1", a1, &dis))
             SetAddonDisabled(dis);
         if (dis) {
             ImGui::TextColored({ 1, 0.4f, 0.4f, 1 }, "ADDON DISABLED -- no mods, no overrides, no skinning.");

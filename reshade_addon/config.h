@@ -35,6 +35,7 @@ inline bool                  g_shader_replace = false;    // swap a game shader 
 inline bool              g_decensor = false;
 inline bool              g_hide_uid = false;         // A5: the UID cut out of the UI text (hud/uid_hide.h)
 inline int               g_reload_key = 0x79;        // VK_F10 (ini reload_key): re-reads d3dx.ini and every mod ini; 0 = off
+inline int               g_toggle_key = 0x75;        // VK_F6 (ini toggle_key): turns every mod's work off and on; 0 = off
 inline std::wstring      g_addon_ini_path;           // wwmi_dx12.ini, read at startup and written back by the overlay
 inline bool              g_skip_engine_tick = false; // A9: perf A/B only -- no [Present] lists, no present pass; mods stop updating
 inline bool              g_frame_end_step = true;    // presents from another thread (frame generation): the per-frame step at the game's own frame end (Numpad 7)

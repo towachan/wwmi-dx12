@@ -600,13 +600,26 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon_module, HMODULE)
     g_decensor = GetPrivateProfileIntW(L"wwmi-dx12", L"decensor", 0, ini_path.c_str()) != 0;
     g_hide_uid = GetPrivateProfileIntW(L"wwmi-dx12", L"hide_uid", 0, ini_path.c_str()) != 0;
     {
-        // The in-game key that makes their engine read d3dx.ini and every mod ini again, as WWMI's F10
-        // does on DX11: a mod added, removed or edited then takes effect without restarting the game.
-        wchar_t key[32] = {};
-        GetPrivateProfileStringW(L"wwmi-dx12", L"reload_key", L"F10", key, (DWORD)std::size(key), ini_path.c_str());
-        g_reload_key = HotkeyFromName(key, VK_F10);
-        ::logger::write("Config: reload_key='%S' -> VK 0x%02x (%s)", key, (unsigned)g_reload_key,
-            g_reload_key ? "the inis are read again on it" : "off");
+        // The add-on's own in-game keys, so each can be moved off another add-on's key. Both mean nothing
+        // with Shift/Ctrl/Alt held: those combinations stay free for mods.
+        struct InGameKey {
+            const wchar_t* ini;
+            const wchar_t* def;
+            int            def_vk;
+            int*           vk;
+            const char*    what;
+        };
+        InGameKey keys[] = {
+            { L"toggle_key", L"F6", VK_F6, &g_toggle_key, "turns every mod's work off and on" },
+            { L"reload_key", L"F10", VK_F10, &g_reload_key, "reads d3dx.ini and every mod ini again" },
+        };
+        for (InGameKey& k : keys) {
+            wchar_t v[32] = {};
+            GetPrivateProfileStringW(L"wwmi-dx12", k.ini, k.def, v, (DWORD)std::size(v), ini_path.c_str());
+            *k.vk = HotkeyFromName(v, k.def_vk);
+            ::logger::write("Config: %S='%S' -> VK 0x%02x, %s (%s)", k.ini, v, (unsigned)*k.vk, k.what,
+                *k.vk ? "on" : "off");
+        }
     }
 #ifdef WWMI_DEBUG
     g_hide_outline = GetPrivateProfileIntW(L"wwmi-dx12", L"hide_outline", 0, ini_path.c_str()) != 0;
