@@ -198,9 +198,9 @@ brings seeds of what was already learned (`wwmi_dx12\cache\seed-<version>.lodcac
 ## Building
 
 Visual Studio 2022 or later (C++ desktop, Windows SDK). `git clone --recurse-submodules`, open
-`wwmi-dx12.sln`, pick Release x64 and build (F6); or
-`msbuild wwmi-dx12.sln /p:Configuration=Release /p:Platform=x64`. The add-on's shaders build with it. The
-output is `build_addon\wwmi_dx12.addon64`.
+`wwmi-dx12.sln`, pick Release x64 and build (F6); or double-click `build.bat`, which finds MSBuild by
+itself; or `msbuild wwmi-dx12.sln /p:Configuration=Release /p:Platform=x64`. The add-on's shaders build
+with it. The output is `build_addon\wwmi_dx12.addon64`.
 
 `msbuild package.proj` builds the same and packs the release zip into `build_addon\release\`.
 
