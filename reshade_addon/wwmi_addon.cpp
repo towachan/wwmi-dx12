@@ -479,6 +479,9 @@ static constexpr uint32_t kOldestReShadeApi = 18;
 static int HotkeyFromName(const wchar_t* value, int fallback)
 {
     std::wstring s = value ? value : L"";
+    // A trailing comment is what people write ("toggle_key = F5  ; off switch"), and GetPrivateProfileString
+    // keeps it: the value ends at the first ';' -- the full-width one too (\uFF1B), for the CN configs.
+    if (const size_t at = s.find_first_of(L";\uFF1B"); at != std::wstring::npos) s.erase(at);
     while (!s.empty() && (s.front() == L' ' || s.front() == L'\t')) s.erase(s.begin());
     while (!s.empty() && (s.back() == L' ' || s.back() == L'\t')) s.pop_back();
     for (wchar_t& c : s) c = (wchar_t)std::towupper(c);
