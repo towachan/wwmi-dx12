@@ -16,9 +16,10 @@ const wchar_t* IniRoot(); // nullptr when unset
 
 void MigotoDir(wchar_t* out, unsigned long count);
 
-std::shared_ptr<InputListener> GateKeyListener(std::shared_ptr<InputListener> inner, const std::wstring& ns);
+std::shared_ptr<InputListener> GateKeyListener(std::shared_ptr<InputListener> inner, const std::wstring& ns,
+    const std::wstring& section);
 
-void SetKeyGate(bool (*fn)(const wchar_t* ns));
+void SetKeyGate(bool (*fn)(const wchar_t* ns, const wchar_t* section));
 
 size_t OverrideNamespaceCount();
 

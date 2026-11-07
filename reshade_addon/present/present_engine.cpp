@@ -24,6 +24,15 @@
 
 using namespace reshade::api;
 
+// The section's own name, without the namespace their parser puts in front of it ("wwmiv1\\keytogglemods").
+static bool SectionEndsWith(const wchar_t* section, const wchar_t* tail)
+{
+    if (!section || !tail || !*tail) return false;
+    const size_t n = wcslen(section);
+    const size_t t = wcslen(tail);
+    return n >= t && _wcsicmp(section + n - t, tail) == 0;
+}
+
 struct PresentPass {
     static const UINT                                 kRing = 3;
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator>    alloc[kRing];
@@ -251,7 +260,7 @@ void EngineFrameTick(command_queue* queue, swapchain* sc, bool bind_back_buffer)
             static bool s_gate_installed = false;
             if (!s_gate_installed) {
                 s_gate_installed = true;
-                PortApi::SetKeyGate([](const wchar_t* ns) -> bool {
+                PortApi::SetKeyGate([](const wchar_t* ns, const wchar_t* section) -> bool {
                     { // Each namespace once, unconditionally: which namespace WWMI's own keys arrive under is
                         // what the block below has to match.
                         static std::mutex                   m;
@@ -262,7 +271,13 @@ void EngineFrameTick(command_queue* queue, swapchain* sc, bool bind_back_buffer)
                             logger::write("KEYGATE: first key press from namespace '%ls'", ns ? ns : L"(null)");
                     }
                     if (!ns || !*ns) return true;
-                    if (_wcsicmp(ns, L"WWMIv1") == 0 || _wcsicmp(ns, L"Debugger") == 0) return false;
+                    if (_wcsicmp(ns, L"Debugger") == 0) return false;
+                    if (_wcsicmp(ns, L"WWMIv1") == 0) {
+                        // WWMI's own keys run as they do on DX11: X closes its notification, F12 shows the
+                        // guide, Alt/Ctrl+F12 the other toggles. One stays ours -- WWMI's F6 turns its mods
+                        // off, do the same thing this add-on's F6 already does, so let the add-on have it.
+                        return !SectionEndsWith(section, L"keytogglemods");
+                    }
                     auto mit = g_ns_to_mod.find(ns);
                     if (mit == g_ns_to_mod.end()) return true; // unknown ns: fire, never swallow silently
                     const int md = mit->second;

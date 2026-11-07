@@ -323,9 +323,48 @@ void PresentRedraw()
     g_ctx.ResetCallCounters();
 }
 
-void SetKeyGate(bool (*fn)(const wchar_t* ns))
+void SetKeyGate(bool (*fn)(const wchar_t* ns, const wchar_t* section))
 {
     MigotoPort::SetKeyGate(fn);
+}
+
+void RequestConfigReload(ID3D12CommandQueue* queue)
+{
+    // Their ReloadConfig releases every custom resource at once. On DX11 the runtime kept one the GPU was
+    // still reading alive; DX12 does not, so let the queue reach the end of what was already submitted.
+    // Done before the engine lock is taken: a game draw on its own thread may want that lock inside.
+    if (queue) {
+        ID3D12Device* dev = nullptr;
+        ID3D12Fence*  fence = nullptr;
+        if (SUCCEEDED(queue->GetDevice(IID_PPV_ARGS(&dev))) && dev) {
+            if (SUCCEEDED(dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence))) && fence) {
+                HANDLE          ev = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+                const ULONGLONG t0 = GetTickCount64();
+                bool            done = false;
+                if (ev && SUCCEEDED(queue->Signal(fence, 1))) {
+                    if (fence->GetCompletedValue() < 1) {
+                        fence->SetEventOnCompletion(1, ev);
+                        done = WaitForSingleObject(ev, 500) == WAIT_OBJECT_0;
+                    } else {
+                        done = true;
+                    }
+                }
+                if (ev) CloseHandle(ev);
+                const ULONGLONG took = GetTickCount64() - t0;
+                if (took >= 5 || !done)
+                    logger::write("RELOAD: waited %llu ms for the queue to drain%s", (unsigned long long)took,
+                        done ? "" : " (timed out -- going on)");
+            }
+            if (fence) fence->Release();
+            dev->Release();
+        }
+    }
+
+    std::lock_guard<std::recursive_mutex> engine_lk(EngineLock());
+    if (!g_loaded) return;
+    if (G->gReloadConfigPending) return; // their own reload key asked too: still one reload
+    G->gReloadConfigPending = true;
+    logger::write("RELOAD: asked for -- their engine re-reads d3dx.ini and every mod ini at the next frame boundary");
 }
 
 void TickInput()

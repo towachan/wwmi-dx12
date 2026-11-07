@@ -123,6 +123,12 @@ void on_present_body(command_queue* queue, swapchain* sc)
     }
     VerboseTick();
     if (g_addon_disabled) return;
+    { // F10 (ini reload_key): their engine re-reads d3dx.ini and every mod ini; the mods are built again after
+        static bool s_reload = false;
+        const bool  k = g_reload_key && GameKeyDown(g_reload_key);
+        if (k && !s_reload) PortApi::RequestConfigReload(reinterpret_cast<ID3D12CommandQueue*>(queue->get_native()));
+        s_reload = k;
+    }
 #ifdef WWMI_DEBUG
     { // Numpad 7: the per-frame step at the game's frame end (frame generation) or at every present, as 2026.10.2
         static bool s_np7 = false;
@@ -154,14 +160,14 @@ static void FrameStep(command_queue* queue, swapchain* sc, bool at_present)
     ConfigWatchTick();
     UpdateSkinBand(); // keep the skin-pool VA band tracking the learned char VB0s (auto re-derive across patches)
     SeedHeartbeat();
-    // Manual reload (B1) runs on the render thread, at the frame boundary.
+    // Manual reload (B1) runs on the render thread, at the frame boundary: the same reload F10 asks for.
     if (g_reload_requested.exchange(false)) {
-        ModLoader::Reload(); // -> g_reload_pending, applied by Tick() just below
-        g_texovr_ready = false;
-        logger::write("RELOAD: engine state cleared (g_texovr_ready=0) -- inis will be re-parsed");
+        PortApi::RequestConfigReload(reinterpret_cast<ID3D12CommandQueue*>(queue->get_native()));
+        logger::write("RELOAD: requested from the overlay -- their engine reads every ini again");
     }
     ModLoader::Tick();
     if (!g_skip_engine_tick) EngineFrameTick(queue, sc, at_present);
+    ModsReloadTick(); // their engine re-read the inis (F10 / reload_config): build every mod again from the new parse
     StartRemovalWatchdog(sc);
     g_buffer_reloc.Sweep(sc->get_device());
     ModTexturesTick();

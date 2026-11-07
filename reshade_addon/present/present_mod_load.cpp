@@ -43,6 +43,62 @@ static void WwmiBannerTick()
     logger::write("BANNER: WWMI's startup banner now reads '%s' / 'WWMI-DX12 %s'", k ? shipped : "WWMI", WWMI_VERSION);
 }
 
+// A generation bump is their engine saying it read d3dx.ini and its includes again: every object it gave
+// us before is a new one now, so the mods built from the old parse are dropped here and LoadGeometryMods()
+// builds them from the new one -- a mod added, removed or edited takes effect without restarting the game.
+static void ModsForgetWorld(unsigned gen)
+{
+    const size_t mods = g_geomods.size();
+    // The textures and the frame's parse snapshots already follow the generation on their own
+    // (SubstantiateWclResources, tex_replace / tex_budget / tex_gc, port_skel_copies); the texture rules
+    // are published again by ModTexturesTick below. The store is dropped here, not at the next tick: the
+    // next frame's draws must not resolve into entries whose textures their reload has just released.
+    ModLoader::ForgetAll();
+    g_texovr_ready = false;
+
+    // Geometry: every unit's components, resources and match ranges came from the old parse.
+    g_geomods.clear();
+    g_ns_to_mod.clear();
+    g_geom_loaded = false;
+    g_ps_slot_queries.store(false, std::memory_order_relaxed);
+    g_merged_comps.clear();
+    g_first_to_comp.clear();
+    g_first_to_shared.clear();
+    g_merged_loaded = false;
+    g_ibhash_slot.clear();
+    g_mod_index_end.clear();
+
+    // What was learned names a mod by the index it had in the old parse.
+    {
+        std::lock_guard l(g_char_mesh_mtx);
+        g_char_mesh_vb0.clear();
+    }
+    g_char_lod_vb0.clear();
+    {
+        std::lock_guard l(g_char_skel_mtx);
+        g_frame_skel.clear();
+    }
+    {
+        std::lock_guard l(g_claimed_ibhash_mtx);
+        g_claimed_ibhash.clear();
+    }
+    IbAnchorReset();
+
+    logger::write("RELOAD: d3dx.ini and every mod ini were read again (generation %u) -- %zu geometry mod(s) "
+                  "built from the old parse are dropped and built again",
+        gen, mods);
+}
+
+void ModsReloadTick()
+{
+    static unsigned s_gen = ~0u;
+    const unsigned  gen = PortApi::LoadGeneration();
+    if (gen == s_gen) return;
+    s_gen = gen;
+    if (!g_geom_loaded) return; // the first parse is still ahead of the first build: nothing to drop yet
+    ModsForgetWorld(gen);
+}
+
 void ModTexturesTick()
 {
     if (g_texovr_ready) {

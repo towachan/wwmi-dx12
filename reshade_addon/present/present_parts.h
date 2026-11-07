@@ -20,6 +20,9 @@ void               ModTexturesTick();                                           
 void               Heartbeat(uint32_t texinj_last);                                                  // present_diag.cpp
 void               HealthHeartbeat();                                                                // present_diag.cpp
 void               LoadGeometryMods();                                                               // present_mod_load.cpp
+// Their engine read d3dx.ini and every mod ini again (F10 / reload_config): the mods built from the old
+// parse are dropped, and LoadGeometryMods() builds them from the new one. Called after EngineFrameTick.
+void               ModsReloadTick();                                                                 // present_mod_load.cpp
 
 extern std::wstring g_cfg_engine_path;
 extern std::wstring g_cfg_db_path;

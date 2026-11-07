@@ -10,6 +10,7 @@ unsigned SrvHeapSize();
 unsigned SrvHeapCap();
 void     Init(reshade::api::device* device);
 void     Reload();
+void     ForgetAll(); // their engine read its inis again: the texture store and every mod texture are dropped now, not at the next Tick
 void     Tick(); // runs a pending Reload
 void     GetLastStats(int& out_mods);
 

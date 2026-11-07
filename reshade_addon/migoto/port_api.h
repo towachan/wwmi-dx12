@@ -45,7 +45,12 @@ void TickInput();
 
 unsigned TakeRefusedNoCl();
 
-void SetKeyGate(bool (*fn)(const wchar_t* ns));
+void SetKeyGate(bool (*fn)(const wchar_t* ns, const wchar_t* section));
+
+// Their [Hunting] reload_config, from the add-on's own key too: the engine re-reads d3dx.ini and every
+// mod ini it includes at its next frame tick. One request is enough (their flag is a bool). The queue is
+// waited for first, so no resource their reload releases is still being read.
+void RequestConfigReload(ID3D12CommandQueue* queue);
 
 struct DrawInfo {
     unsigned vertex_count = 0;

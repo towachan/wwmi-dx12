@@ -550,3 +550,15 @@ void ModLoader::Reload()
 {
     g_reload_pending = true;
 }
+void ModLoader::ForgetAll()
+{
+    if (!g_device) return;
+    // Present thread: the store first, so no reader resolves into the old table once its keys are gone.
+    TexStoreClear();
+    g_tex_resources.clear();
+    g_tex_ovr_loaded = true; // the heap exists; LoadTextureOverrides() would only size and log it again
+    g_srv_heap_size = 0;
+    g_srv_free.clear();
+    ++g_srv_epoch;
+    logger::write("ModLoader: every mod texture dropped -- their engine read d3dx.ini and the mods again");
+}

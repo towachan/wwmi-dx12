@@ -24,6 +24,8 @@
 #include "instrumentation/hot_path.h"
 #include "draw/draw_hook.h"
 #include "instrumentation/draw_dump_publish.h" // X27ResolveVsCbs -- the game's bone CBs per game draw (X23)
+#include <cwchar>  // wcstol -- HotkeyFromName below
+#include <cwctype> // towupper
 
 bool g_is_dx12 = false;
 
@@ -473,6 +475,41 @@ static void ActivateD3D12()
 
 static constexpr uint32_t kOldestReShadeApi = 18;
 
+// "F10", "f12", "K", "7", "HOME", "NONE" -> a VK_* code; 0 = off. `fallback` when the name means nothing.
+static int HotkeyFromName(const wchar_t* value, int fallback)
+{
+    std::wstring s = value ? value : L"";
+    while (!s.empty() && (s.front() == L' ' || s.front() == L'\t')) s.erase(s.begin());
+    while (!s.empty() && (s.back() == L' ' || s.back() == L'\t')) s.pop_back();
+    for (wchar_t& c : s) c = (wchar_t)std::towupper(c);
+    if (s.empty()) return fallback;
+    if (s == L"NONE" || s == L"OFF") return 0;
+    if (s[0] == L'F' && s.size() > 1 && s.size() <= 3) {
+        const wchar_t* rest = s.c_str() + 1;
+        wchar_t*       end = nullptr;
+        const long     n = wcstol(rest, &end, 10);
+        if (end && *end == 0 && n >= 1 && n <= 24) return VK_F1 + (int)n - 1;
+    }
+    if (s.size() == 1) {
+        const wchar_t c = s[0];
+        if ((c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9')) return (int)c;
+    }
+    struct Named {
+        const wchar_t* name;
+        int            vk;
+    };
+    static const Named kNamed[] = {
+        { L"HOME", VK_HOME }, { L"END", VK_END }, { L"INSERT", VK_INSERT }, { L"DELETE", VK_DELETE },
+        { L"PGUP", VK_PRIOR }, { L"PAGEUP", VK_PRIOR }, { L"PGDN", VK_NEXT }, { L"PAGEDOWN", VK_NEXT },
+        { L"TAB", VK_TAB }, { L"SPACE", VK_SPACE }, { L"ESC", VK_ESCAPE }, { L"ESCAPE", VK_ESCAPE },
+        { L"PAUSE", VK_PAUSE }, { L"CAPSLOCK", VK_CAPITAL }, { L"PRINTSCREEN", VK_SNAPSHOT },
+        { L"SCROLLLOCK", VK_SCROLL }
+    };
+    for (const Named& n : kNamed)
+        if (s == n.name) return n.vk;
+    return fallback;
+}
+
 static bool RegisterWithReShade(HMODULE addon_module)
 {
     if (reshade::register_addon(addon_module)) {
@@ -562,6 +599,15 @@ extern "C" __declspec(dllexport) bool AddonInit(HMODULE addon_module, HMODULE)
     g_addon_ini_path = ini_path;
     g_decensor = GetPrivateProfileIntW(L"wwmi-dx12", L"decensor", 0, ini_path.c_str()) != 0;
     g_hide_uid = GetPrivateProfileIntW(L"wwmi-dx12", L"hide_uid", 0, ini_path.c_str()) != 0;
+    {
+        // The in-game key that makes their engine read d3dx.ini and every mod ini again, as WWMI's F10
+        // does on DX11: a mod added, removed or edited then takes effect without restarting the game.
+        wchar_t key[32] = {};
+        GetPrivateProfileStringW(L"wwmi-dx12", L"reload_key", L"F10", key, (DWORD)std::size(key), ini_path.c_str());
+        g_reload_key = HotkeyFromName(key, VK_F10);
+        ::logger::write("Config: reload_key='%S' -> VK 0x%02x (%s)", key, (unsigned)g_reload_key,
+            g_reload_key ? "the inis are read again on it" : "off");
+    }
 #ifdef WWMI_DEBUG
     g_hide_outline = GetPrivateProfileIntW(L"wwmi-dx12", L"hide_outline", 0, ini_path.c_str()) != 0;
 #endif

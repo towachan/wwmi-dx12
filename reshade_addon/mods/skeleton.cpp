@@ -14,8 +14,10 @@ using namespace reshade::api;
 void FinalizeMergedRemap()
 {
     if (g_merged_loaded || !g_d3d12_device) return;
-    if (SUCCEEDED(CreateD3D12Buffer(g_d3d12_device, D3D12_HEAP_TYPE_UPLOAD, kBoneCBBytes,
-            D3D12_RESOURCE_STATE_GENERIC_READ, &g_identity_cb))) {
+    // A reload calls this again with mods rebuilt; the identity CB is the device's, not a mod's, so it is
+    // made once. Re-making it would release a buffer the GPU may still be reading.
+    if (!g_identity_cb && SUCCEEDED(CreateD3D12Buffer(g_d3d12_device, D3D12_HEAP_TYPE_UPLOAD, kBoneCBBytes,
+                                           D3D12_RESOURCE_STATE_GENERIC_READ, &g_identity_cb))) {
         D3D12_RANGE nr = { 0, 0 };
         void*       m = nullptr;
         if (FAILED(g_identity_cb->Map(0, &nr, &m)) || !m) {

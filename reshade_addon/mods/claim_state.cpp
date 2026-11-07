@@ -86,13 +86,17 @@ CompSet ModDeclaredComps(int mod_id)
 {
     static std::mutex                       m;
     static size_t                           built_for = (size_t)-1;
+    static unsigned                         built_gen = ~0u;
     static std::unordered_map<int, CompSet> sets;
     std::lock_guard                         l(m);
-    if (built_for != g_merged_comps.size()) {
+    // Size alone is not enough: a reload can leave the count the same and every component different.
+    const unsigned gen = PortApi::LoadGeneration();
+    if (built_for != g_merged_comps.size() || built_gen != gen) {
         sets.clear();
         for (const MergedComp& c : g_merged_comps)
             if (c.comp_idx >= 0) sets[c.mod_id].set(c.comp_idx);
         built_for = g_merged_comps.size();
+        built_gen = gen;
     }
     auto it = sets.find(mod_id);
     return it == sets.end() ? CompSet{} : it->second;
@@ -168,6 +172,15 @@ void IbAnchorForget(uint64_t va, uint64_t bytes)
     std::lock_guard l(g_ib_anchor_mtx);
     g_ib_ev.erase(g_ib_ev.lower_bound(va), g_ib_ev.lower_bound(va + bytes));
     g_ib_anchor.erase(g_ib_anchor.lower_bound(va), g_ib_anchor.lower_bound(va + bytes));
+}
+
+void IbAnchorReset()
+{
+    std::lock_guard l(g_ib_anchor_mtx);
+    const size_t    had = g_ib_anchor.size();
+    g_ib_ev.clear();
+    g_ib_anchor.clear();
+    if (had) logger::write("IBANCHOR: forgot all %zu learned anchor(s) -- their engine read the inis again", had);
 }
 
 std::unordered_set<uint32_t> g_frame_skel;   // character skeleton CONTENT hashes this frame

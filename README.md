@@ -30,6 +30,8 @@ engine with the game in **DirectX 12**, on the WWMI folder and mods you already 
   (window option, off by default)
 - **Frame generation** - modded characters and generated frames together
 - **Mod logic** - hosts the XXMI fork of 3dmigoto: a mod's ini logic, toggles and keys run as written
+- **Reload in game** - `[F10]` reads `d3dx.ini` and every mod ini again, as WWMI's F10 does on DX11: a mod
+  added, removed or edited takes effect without restarting the game
 - **Same WWMI, same mods** - your WWMI and `Mods` folders as they are, nested folders included, nothing
   to convert
 - **Some mods broken on DX11 work here**
@@ -86,8 +88,9 @@ with a `wwmi-dx12` window showing "Active mods" above 0.
 
 ## Known Issues
 
-- WWMI's own hotkeys and guides are not available
-- Mods load when the game starts; restart the game after adding or changing a mod
+- WWMI's hunting mode has no DX12 overlay (`[F8]` and the numpad hunting keys do nothing visible)
+- WWMI's own `[F6]` would do what this add-on's `[F6]` already does, so that one key stays the add-on's
+- A reload reads every mod ini again, but a mod's shaders are still patched the first time it draws
 - Decensor and RabbitFX mods prepare shaders on first sight (one-time stutter, saved for next launch)
 
 ## Mod Installation
@@ -98,8 +101,12 @@ with a `wwmi-dx12` window showing "Active mods" above 0.
 ## Hotkeys
 
 - `[Home]` - ReShade, with the `wwmi-dx12` window
+- `[F10]` - read `d3dx.ini` and every mod ini again, as WWMI's F10 does on DX11: a mod added, removed or
+  edited takes effect without restarting the game. `reload_key` in `wwmi_dx12.ini` picks another key
 - `[F6]` - turn the add-on off and on
-- Keys a mod defines work as in DX11; WWMI's own (`[F10]`, `[F12]`, hunting mode) do nothing here.
+- Keys a mod defines work as in DX11. WWMI's own keys are let through too, as on DX11: `[X]` closes its
+  notification, `[F12]` shows its guide. WWMI's `[F6]`, which turns its mods off, stays this add-on's off
+  switch instead.
 
 ## The wwmi-dx12 window
 

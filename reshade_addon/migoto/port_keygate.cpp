@@ -35,7 +35,7 @@ std::mutex& Mtx()
     static std::mutex* m = new std::mutex();
     return *m;
 }
-bool (*g_gate)(const wchar_t*) = nullptr;
+bool (*g_gate)(const wchar_t*, const wchar_t*) = nullptr;
 std::atomic<size_t> g_gated{ 0 };
 std::atomic<size_t> g_wrapped_quiet{ 0 };
 thread_local bool   t_bound_loading = false; // PortApi::BoundLoading
@@ -286,20 +286,22 @@ namespace {
 class GatedKeyListener : public InputListener {
     std::shared_ptr<InputListener> inner_;
     std::wstring                   ns_;
+    std::wstring                   section_;
 
 public:
-    GatedKeyListener(std::shared_ptr<InputListener> inner, const std::wstring& ns)
+    GatedKeyListener(std::shared_ptr<InputListener> inner, const std::wstring& ns, const std::wstring& section)
         : inner_(std::move(inner)),
-          ns_(ns)
+          ns_(ns),
+          section_(section)
     {}
     void DownEvent(HackerDevice* device) override
     {
-        bool (*gate)(const wchar_t*);
+        bool (*gate)(const wchar_t*, const wchar_t*);
         {
             std::lock_guard<std::mutex> l(Mtx());
             gate = g_gate;
         }
-        if (gate && !gate(ns_.c_str())) return;
+        if (gate && !gate(ns_.c_str(), section_.c_str())) return;
         inner_->DownEvent(device);
     }
     void UpEvent(HackerDevice* device) override { inner_->UpEvent(device); }
@@ -541,11 +543,12 @@ public:
 };
 } // namespace
 
-std::shared_ptr<InputListener> GateKeyListener(std::shared_ptr<InputListener> inner, const std::wstring& ns)
+std::shared_ptr<InputListener> GateKeyListener(std::shared_ptr<InputListener> inner, const std::wstring& ns,
+    const std::wstring& section)
 {
     if (!inner) return inner;
     g_gated.fetch_add(1, std::memory_order_relaxed);
-    return std::make_shared<GatedKeyListener>(std::move(inner), ns);
+    return std::make_shared<GatedKeyListener>(std::move(inner), ns, section);
 }
 
 namespace {
@@ -604,7 +607,7 @@ void WrapObservedCommands(std::vector<CommandList*>& lists)
         n, lists.size(), g_wrapped_quiet.exchange(0, std::memory_order_relaxed));
 }
 
-void SetKeyGate(bool (*fn)(const wchar_t* ns))
+void SetKeyGate(bool (*fn)(const wchar_t* ns, const wchar_t* section))
 {
     std::lock_guard<std::mutex> l(Mtx());
     g_gate = fn;
